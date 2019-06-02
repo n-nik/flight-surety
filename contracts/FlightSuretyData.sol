@@ -20,9 +20,13 @@ contract FlightSuretyData {
         bool isExists;
         uint256 registeredNumber;
         bool needApprove;
-        uint256 funds;
-        uint256 votes;
+        bool isFunded;
+        Votes votes;
         uint256 minVotes;
+    }
+    struct Votes{
+        uint votersCount;
+        mapping(address => bool) voters;
     }
 
     uint256 private airlinesCount = 0;
@@ -66,26 +70,25 @@ contract FlightSuretyData {
         require(msg.sender == contractOwner, "Caller is not contract owner");
         _;
     }
-    modifier requireAuthorizedCaller(address contractAddress)
-    {
+    modifier requireAuthorizedCaller(address contractAddress) {
          require(authorizedCallers[contractAddress] == true, "Not Authorized Caller");
         _;
     }
-//
-//    modifier checkAirlineExists(address airlineAddress) {
-//        require(airlines[airlineAddress].isExists, "Airline with such address does't exist");
-//        _;
-//    }
+
+    modifier checkAirlineExists(address airlineAddress) {
+        require(airlines[airlineAddress].isExists, "Airline does't exist");
+        _;
+    }
 
     modifier checkAirlineApproved(address airlineAddress) {
         Airline airline = airlines[airlineAddress];
-        require((airline.needApprove == false) || (airline.votes >= airline.minVotes), "Need approval from other Airlines");
+        require((airline.needApprove == false) || (airline.votes.votersCount >= airline.minVotes), "Need approval from other Airlines");
         _;
     }
 
     modifier checkAirlineFunds(address airlineAddress) {
-        Airline airline = airlines[airlineAddress];
-        require(airline.funds >= MIN_AIRLINE_FUNDS, "Need funds");
+        Airline memory airline = airlines[airlineAddress];
+        require(airline.isFunded != true, "Need funds");
         _;
     }
 
@@ -130,8 +133,8 @@ contract FlightSuretyData {
             isExists: true,
             registeredNumber: airlinesCount,
             needApprove: airlinesCount >= MAX_AUTO_REGISTERED_AIRLINES,
-            votes: 0,
-            funds: 0,
+            votes: Votes(0),
+            isFunded: false,
             minVotes: airlinesCount.add(1).div(2)
         });
 
@@ -143,9 +146,13 @@ contract FlightSuretyData {
      *      Can only be called from FlightSuretyApp contract
      *
      */
-    function voteAirline(address airlineAddress) external  returns (bool){
-        airlines[airlineAddress].votes = airlines[airlineAddress].votes.add(1);
-        airlines[airlineAddress].needApprove = airlines[airlineAddress].votes < airlines[airlineAddress].minVotes;
+    function voteAirline(address airlineAddress, address voterAddress) external checkAirlineExists(airlineAddress)  returns (bool){
+        require(airlines[airlineAddress].votes.voters[voterAddress] == false, "Airline already voted by this account");
+
+        airlines[airlineAddress].votes.votersCount = airlines[airlineAddress].votes.votersCount.add(1);
+        airlines[airlineAddress].votes.voters[voterAddress] = true;
+
+        airlines[airlineAddress].needApprove = airlines[airlineAddress].votes.votersCount < airlines[airlineAddress].minVotes;
         return airlines[airlineAddress].needApprove;
     }
 
@@ -177,38 +184,31 @@ contract FlightSuretyData {
      *      resulting in insurance payouts, the contract should be self-sustaining
      *
      */
-    function fund() public payable {
+    function fund(address airlineAddress) payable external requireIsOperational() checkAirlineExists(airlineAddress) checkAirlineApproved(airlineAddress){
+        airlines[airlineAddress].isFunded = true;
     }
 
     function getFlightKey(address airline, string memory flight, uint256 timestamp) pure internal returns (bytes32) {
         return keccak256(abi.encodePacked(airline, flight, timestamp));
     }
 
-    function isAirline(address airlineAddress) public view returns (bool) {
+    function isAirline(address airlineAddress) public view requireIsOperational() returns (bool) {
         return airlines[airlineAddress].isExists;
     }
 
-    function getAirline(address airlineAddress) public view returns (bool isExists, uint256 registeredNumber, bool needApprove, uint256 funds, uint256 votes, uint minVotes) {
+    function getAirline(address airlineAddress) public view requireIsOperational() returns (bool isExists, uint256 registeredNumber, bool needApprove, bool isFunded, uint256 votersCount, uint minVotes) {
         Airline memory airline = airlines[airlineAddress];
         return (
             airline.isExists,
             airline.registeredNumber,
             airline.needApprove,
-            airline.funds,
-            airline.votes,
+            airline.isFunded,
+            airline.votes.votersCount,
             airline.minVotes
         );
     }
     function getAirlinesCount() public view returns (uint256) {
         return airlinesCount;
-    }
-
-    /**
-    * @dev Fallback function for funding smart contract.
-    *
-    */
-    function() external payable {
-        fund();
     }
 
 

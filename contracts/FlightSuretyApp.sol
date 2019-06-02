@@ -67,7 +67,7 @@ contract FlightSuretyApp {
 
     modifier canAirlineCreateOrUpdate() {
         bool canCreate = (dataContract.getAirlinesCount() == 0) || (dataContract.isAirline(msg.sender) == true);
-        require(canCreate == true, "You can not create airline");
+        require(canCreate == true, "You can not create or update airline");
         _;
     }
 
@@ -101,6 +101,7 @@ contract FlightSuretyApp {
     /********************************************************************************************/
     event ToVoteAirline(address airline);
     event AirlineWasVoted(address airline, bool needApproved);
+    event AirlineWasFunded(address airline);
 
 
 
@@ -113,7 +114,7 @@ contract FlightSuretyApp {
     * @dev Add an airline to the registration queue
     *
     */
-    function registerAirline(address airlineAddress) public canAirlineCreateOrUpdate{
+    function registerAirline(address airlineAddress) public requireIsOperational() canAirlineCreateOrUpdate() {
         dataContract.registerAirline(airlineAddress);
     }
 
@@ -121,13 +122,21 @@ contract FlightSuretyApp {
      * @dev Add an airline to the registration queue
      *
      */
-    function voteAirline(address airlineAddress) public canAirlineCreateOrUpdate{
-        bool needApproved = dataContract.voteAirline(airlineAddress);
-        if (needApproved != true) {
-            emit AirlineWasVoted(airlineAddress, needApproved);
-        }
+    function voteAirline(address airlineAddress) public requireIsOperational() canAirlineCreateOrUpdate() {
+        bool needApproved = dataContract.voteAirline(airlineAddress, msg.sender);
+        emit AirlineWasVoted(airlineAddress, needApproved);
     }
 
+
+    /**
+     * @dev Fund flight for insuring.
+     *
+     */
+    function fundAirline() public payable requireIsOperational() canAirlineCreateOrUpdate(){
+        require(msg.value >= 10 ether, 'No enough funds');
+        dataContract.fund(msg.sender);
+        emit AirlineWasFunded(msg.sender);
+    }
 
    /**
     * @dev Register a future flight for insuring.
@@ -136,6 +145,7 @@ contract FlightSuretyApp {
     function registerFlight() external pure {
 
     }
+
 
    /**
     * @dev Called after oracle has updated flight status

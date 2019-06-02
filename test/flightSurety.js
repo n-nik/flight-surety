@@ -103,18 +103,30 @@ contract('Flight Surety Tests', async (accounts) => {
 
         assert.equal(result.needApprove, true, "Can create airlines without multi approval");
     });
-    //
-    // it('(airline) vote airlines', async () => {
-    //     try {
-    //         await config.flightSuretyApp.voteAirline(accounts[7], {from: config.firstAirline});
-    //         await config.flightSuretyApp.voteAirline(accounts[7], {from: accounts[4]});
-    //     } catch (e) {
-    //         console.log(e);
-    //     }
-    //     let result = await config.flightSuretyData.getAirline.call(accounts[7]);
-    //
-    //     assert.equal(result.needApprove, false, "Vote not work correctly");
-    // });
+
+    it('(airline) vote airlines', async () => {
+        const airlineToVote = accounts[7];
+        try {
+            await config.flightSuretyApp.voteAirline(airlineToVote, {from: config.firstAirline});
+        } catch (e) { console.log(e); }
+        let result1 = await config.flightSuretyData.getAirline.call(airlineToVote);
+        assert.equal(result1.needApprove, true, "Need more votes to be approved");
+
+        try {
+            await config.flightSuretyApp.voteAirline(airlineToVote, {from: accounts[5]});
+        } catch (e) { console.log(e); }
+        let result2 = await config.flightSuretyData.getAirline.call(airlineToVote);
+        assert.equal(result2.needApprove, false, "Must be approved");
+    });
+
+
+    it('(airline) fund airlines', async () => {
+        try {
+            await config.flightSuretyApp.fundAirline({from: accounts[7], value: web3.utils.toWei('10', "ether")});
+        } catch (e) { console.log(e.message)}
+        const resultSuccess = await config.flightSuretyData.getAirline.call(accounts[7]);
+        assert.equal(resultSuccess.isFunded, true, "Should funded approved airline");
+    });
 
     // it('(airline) cannot register an Airline using registerAirline() if it is not funded', async () => {
     //
