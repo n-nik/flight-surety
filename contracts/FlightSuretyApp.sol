@@ -5,12 +5,15 @@ pragma solidity ^0.4.25;
 // More info: https://www.nccgroup.trust/us/about-us/newsroom-and-events/blog/2018/november/smart-contract-insecurity-bad-arithmetic/
 
 import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "./FlightSuretyData.sol";
 
 /************************************************** */
 /* FlightSurety Smart Contract                      */
 /************************************************** */
 contract FlightSuretyApp {
     using SafeMath for uint256; // Allow SafeMath functions to be called for all uint256 types (similar to "prototype" in Javascript)
+
+    FlightSuretyData dataContract;
 
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
@@ -62,6 +65,13 @@ contract FlightSuretyApp {
         _;
     }
 
+    modifier canAirlineCreateOrUpdate() {
+        bool canCreate = (dataContract.getAirlinesCount() == 0) || (dataContract.isAirline(msg.sender) == true);
+        require(canCreate == true, "You can not create airline");
+        _;
+    }
+
+
     /********************************************************************************************/
     /*                                       CONSTRUCTOR                                        */
     /********************************************************************************************/
@@ -70,8 +80,11 @@ contract FlightSuretyApp {
     * @dev Contract constructor
     *
     */
-    constructor() public {
+    constructor(address dataContractAddress, address firstAirlineAddress) public {
         contractOwner = msg.sender;
+        dataContract = FlightSuretyData(dataContractAddress);
+        registerAirline(firstAirlineAddress);
+
     }
 
     /********************************************************************************************/
@@ -82,6 +95,15 @@ contract FlightSuretyApp {
         return operational;  // Modify to call data contract's status
     }
 
+
+    /********************************************************************************************/
+    /*                                       EVENT DEFINITIONS                                  */
+    /********************************************************************************************/
+    event ToVoteAirline(address airline);
+    event AirlineWasVoted(address airline, bool needApproved);
+
+
+
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
@@ -91,8 +113,19 @@ contract FlightSuretyApp {
     * @dev Add an airline to the registration queue
     *
     */
-    function registerAirline() external pure returns(bool success, uint256 votes) {
-        return (success, 0);
+    function registerAirline(address airlineAddress) public canAirlineCreateOrUpdate{
+        dataContract.registerAirline(airlineAddress);
+    }
+
+    /**
+     * @dev Add an airline to the registration queue
+     *
+     */
+    function voteAirline(address airlineAddress) public canAirlineCreateOrUpdate{
+        bool needApproved = dataContract.voteAirline(airlineAddress);
+        if (needApproved != true) {
+            emit AirlineWasVoted(airlineAddress, needApproved);
+        }
     }
 
 
@@ -134,6 +167,13 @@ contract FlightSuretyApp {
     function setOperatingStatus(bool mode) public requireContractOwner {
         operational = mode;
     }
+
+
+
+
+
+
+
 
 // region ORACLE MANAGEMENT
 

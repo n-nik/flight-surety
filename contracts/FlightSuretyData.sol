@@ -5,12 +5,28 @@ import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
 contract FlightSuretyData {
     using SafeMath for uint256;
 
+    uint256 public MAX_AUTO_REGISTERED_AIRLINES = 4;
+    uint256 private MIN_AIRLINE_FUNDS = 10 ether;
+
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
     /********************************************************************************************/
 
     address private contractOwner;                                      // Account used to deploy contract
     bool private operational = true;                                    // Blocks all state changes throughout the contract if false
+    mapping (address=>bool) private authorizedCallers;
+
+    struct Airline {
+        bool isExists;
+        uint256 registeredNumber;
+        bool needApprove;
+        uint256 funds;
+        uint256 votes;
+        uint256 minVotes;
+    }
+
+    uint256 private airlinesCount = 0;
+    mapping(address => Airline) private airlines;
 
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
@@ -50,6 +66,29 @@ contract FlightSuretyData {
         require(msg.sender == contractOwner, "Caller is not contract owner");
         _;
     }
+    modifier requireAuthorizedCaller(address contractAddress)
+    {
+         require(authorizedCallers[contractAddress] == true, "Not Authorized Caller");
+        _;
+    }
+//
+//    modifier checkAirlineExists(address airlineAddress) {
+//        require(airlines[airlineAddress].isExists, "Airline with such address does't exist");
+//        _;
+//    }
+
+    modifier checkAirlineApproved(address airlineAddress) {
+        Airline airline = airlines[airlineAddress];
+        require((airline.needApprove == false) || (airline.votes >= airline.minVotes), "Need approval from other Airlines");
+        _;
+    }
+
+    modifier checkAirlineFunds(address airlineAddress) {
+        Airline airline = airlines[airlineAddress];
+        require(airline.funds >= MIN_AIRLINE_FUNDS, "Need funds");
+        _;
+    }
+
 
     /********************************************************************************************/
     /*                                       UTILITY FUNCTIONS                                  */
@@ -74,6 +113,9 @@ contract FlightSuretyData {
         operational = mode;
     }
 
+    function authorizeCaller(address contractAddress) external requireContractOwner requireIsOperational {
+        authorizedCallers[contractAddress] = true;
+    }
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
@@ -83,7 +125,28 @@ contract FlightSuretyData {
      *      Can only be called from FlightSuretyApp contract
      *
      */
-    function registerAirline() external pure {
+    function registerAirline(address airlineAddress) external {
+        airlines[airlineAddress] = Airline({
+            isExists: true,
+            registeredNumber: airlinesCount,
+            needApprove: airlinesCount >= MAX_AUTO_REGISTERED_AIRLINES,
+            votes: 0,
+            funds: 0,
+            minVotes: airlinesCount.add(1).div(2)
+        });
+
+        airlinesCount = airlinesCount.add(1);
+    }
+
+    /**
+     * @dev Add vote to airline, return needApprove flag
+     *      Can only be called from FlightSuretyApp contract
+     *
+     */
+    function voteAirline(address airlineAddress) external  returns (bool){
+        airlines[airlineAddress].votes = airlines[airlineAddress].votes.add(1);
+        airlines[airlineAddress].needApprove = airlines[airlineAddress].votes < airlines[airlineAddress].minVotes;
+        return airlines[airlineAddress].needApprove;
     }
 
 
@@ -119,6 +182,25 @@ contract FlightSuretyData {
 
     function getFlightKey(address airline, string memory flight, uint256 timestamp) pure internal returns (bytes32) {
         return keccak256(abi.encodePacked(airline, flight, timestamp));
+    }
+
+    function isAirline(address airlineAddress) public view returns (bool) {
+        return airlines[airlineAddress].isExists;
+    }
+
+    function getAirline(address airlineAddress) public view returns (bool isExists, uint256 registeredNumber, bool needApprove, uint256 funds, uint256 votes, uint minVotes) {
+        Airline memory airline = airlines[airlineAddress];
+        return (
+            airline.isExists,
+            airline.registeredNumber,
+            airline.needApprove,
+            airline.funds,
+            airline.votes,
+            airline.minVotes
+        );
+    }
+    function getAirlinesCount() public view returns (uint256) {
+        return airlinesCount;
     }
 
     /**
