@@ -6,7 +6,6 @@ contract FlightSuretyData {
     using SafeMath for uint256;
 
     uint256 public MAX_AUTO_REGISTERED_AIRLINES = 4;
-    uint256 private MIN_AIRLINE_FUNDS = 10 ether;
 
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
