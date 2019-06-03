@@ -1,34 +1,52 @@
 # FlightSurety
 
-FlightSurety is a sample application project for Udacity's Blockchain course.
+FlightSurety is application project for Udacity's Blockchain course.
+
+## Prerequisites
+
+Please make sure you've already installed nodejs version 10+ (tested on v10.15.2), MetaMask extension( with wallet imported from ganache )in your browser.
+
 
 ## Install
 
-This repository contains Smart Contract code in Solidity (using Truffle), tests (also using Truffle), dApp scaffolding (using HTML, CSS and JS) and server app scaffolding.
+This repository contains Smart Contract code in Solidity (using Truffle), tests (also using Truffle), dApp (using HTML, CSS and JS) and server app.
 
 To install, download or clone the repo, then:
 
 `npm install`
-`truffle compile`
 
-## Develop Client
+## Launch Ganache:
+Run this command in separate terminal window
 
-To run truffle tests:
+`npx ganache-cli -m "candy maple cake sugar pudding cream honey rich smooth crumble sweet treat" -a 50`
+
+## Run truffle tests:
 
 `npm run test`
 
+Test result:
+![UML activity diagram](images/tests.jpg)
+
+## Compile and migrate project:
 To use the dapp:
 
-`truffle migrate`
+`npx truffle compile`
+
+`npx truffle migrate --reset`
+
+## Launch Oracles Server
+Run this command in separate terminal window
+
+`npm run server`
+
+## Launch Dapp
+Run this command in separate terminal window
+
 `npm run dapp`
 
 To view dapp:
 
 `http://localhost:8000`
-
-## Develop Server
-
-`npm run server`
 
 ## Deploy
 
