@@ -50,7 +50,6 @@ const oracles = [];
 
 })();
 
-console.log('Start to watch OracleRequest');
 
 flightSuretyApp.events.OracleRequest({
     fromBlock: 0

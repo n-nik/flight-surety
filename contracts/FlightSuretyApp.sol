@@ -32,10 +32,11 @@ contract FlightSuretyApp {
     address private contractOwner;          // Account used to deploy contract
 
     struct Flight {
-        bool isRegistered;
-        uint8 statusCode;
-        uint256 updatedTimestamp;
         address airline;
+        uint256 timestamp;
+        uint8 statusCode;
+        address passenger;
+        uint256 value;
     }
     mapping(bytes32 => Flight) private flights;
 
@@ -84,7 +85,6 @@ contract FlightSuretyApp {
         contractOwner = msg.sender;
         dataContract = FlightSuretyData(dataContractAddress);
         registerAirline(firstAirlineAddress);
-
     }
 
     /********************************************************************************************/
@@ -102,6 +102,8 @@ contract FlightSuretyApp {
     event ToVoteAirline(address airline);
     event AirlineWasVoted(address airline, bool needApproved);
     event AirlineWasFunded(address airline);
+    event InsurancePayout(address airline, string flight, uint256 timestamp, uint256 insurancePayoutValue, uint256 passengerBalance);
+    event UpdatedPassengerBalance(uint256 balance);
 
 
 
@@ -134,7 +136,7 @@ contract FlightSuretyApp {
      */
     function fundAirline() public payable requireIsOperational() canAirlineCreateOrUpdate(){
         require(msg.value >= 10 ether, 'No enough funds');
-        dataContract.fund(msg.sender);
+        dataContract.fund.value(msg.value)(msg.sender);
         emit AirlineWasFunded(msg.sender);
     }
 
@@ -142,8 +144,20 @@ contract FlightSuretyApp {
     * @dev Register a future flight for insuring.
     *
     */
-    function registerFlight() external pure {
+    function registerFlight(address airline, string flight, uint256 timestamp) payable public requireIsOperational{
+        require(msg.value <= 1 ether, 'Max pay value is 1 ether');
+        require(msg.value > 0, 'Pay value is required');
 
+        bytes32 key = getFlightKey(airline, flight, timestamp);
+
+        flights[key] = Flight({
+            airline: airline,
+            timestamp: timestamp,
+            statusCode: STATUS_CODE_UNKNOWN,
+            passenger: msg.sender,
+            value: msg.value
+        });
+        dataContract.buy.value(msg.value)(msg.sender, key);
     }
 
 
@@ -151,12 +165,33 @@ contract FlightSuretyApp {
     * @dev Called after oracle has updated flight status
     *
     */
-    function processFlightStatus ( address airline, string memory flight, uint256 timestamp, uint8 statusCode) internal pure {
+    function processFlightStatus ( address airline, string memory flight, uint256 timestamp, uint8 statusCode) internal requireIsOperational()  {
+        bytes32 key = getFlightKey(airline, flight, timestamp);
+
+        flights[key].statusCode = statusCode;
+        if (statusCode == STATUS_CODE_LATE_AIRLINE) {
+            dataContract.creditInsurees(key);
+            uint256 insurancePayoutValue = dataContract.getInsurancePayoutValue(key);
+            uint256 passengerBalance = dataContract.getPassengerBalance(flights[key].passenger);
+            emit InsurancePayout(airline, flight, timestamp, insurancePayoutValue, passengerBalance);
+        } else {
+            dataContract.closeInsurance(key);
+        }
     }
 
+    function getPassengerBalance(address passengerAddress) view public requireIsOperational() returns(uint256 balance){
+         return dataContract.getPassengerBalance(passengerAddress);
+    }
+
+    function withdrawPassengerFunds() public requireIsOperational() {
+        uint256 passengerBalance = dataContract.getPassengerBalance(msg.sender);
+        require(passengerBalance > 0, "Insufficient funds on passenger's balance");
+        dataContract.pay(msg.sender);
+        emit UpdatedPassengerBalance(dataContract.getPassengerBalance(msg.sender));
+    }
 
     // Generate a request for oracles to fetch flight information
-    function fetchFlightStatus(address airline, string flight, uint256 timestamp) external{
+    function fetchFlightStatus(address airline, string flight, uint256 timestamp) public{
         uint8 index = getRandomIndex(msg.sender);
 
         // Generate a unique key for storing the request
@@ -177,10 +212,6 @@ contract FlightSuretyApp {
     function setOperatingStatus(bool mode) public requireContractOwner {
         operational = mode;
     }
-
-
-
-
 
 
 

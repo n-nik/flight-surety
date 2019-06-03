@@ -5,7 +5,12 @@ import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
 contract FlightSuretyData {
     using SafeMath for uint256;
 
-    uint256 public MAX_AUTO_REGISTERED_AIRLINES = 4;
+    uint public MAX_AUTO_REGISTERED_AIRLINES = 4;
+
+    uint public INSURANCE_STATUS_UNKNOWN = 0;
+    uint public INSURANCE_STATUS_IN_PROGRESS = 1;
+    uint public INSURANCE_STATUS_PAID = 1;
+    uint public INSURANCE_STATUS_CLOSED = 2;
 
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
@@ -31,6 +36,13 @@ contract FlightSuretyData {
     uint256 private airlinesCount = 0;
     mapping(address => Airline) private airlines;
 
+    struct InsuranceInfo{
+        address passenger;
+        uint256 value;
+        uint status;
+    }
+    mapping(bytes32 => InsuranceInfo) private insurances;
+    mapping(address => uint256) private passengerBalances;
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
     /********************************************************************************************/
@@ -105,7 +117,6 @@ contract FlightSuretyData {
         return operational;
     }
 
-
     /**
     * @dev Sets contract operations on/off
     *
@@ -127,7 +138,7 @@ contract FlightSuretyData {
      *      Can only be called from FlightSuretyApp contract
      *
      */
-    function registerAirline(address airlineAddress) external {
+    function registerAirline(address airlineAddress) external requireIsOperational{
         airlines[airlineAddress] = Airline({
             isExists: true,
             registeredNumber: airlinesCount,
@@ -145,7 +156,7 @@ contract FlightSuretyData {
      *      Can only be called from FlightSuretyApp contract
      *
      */
-    function voteAirline(address airlineAddress, address voterAddress) external checkAirlineExists(airlineAddress)  returns (bool){
+    function voteAirline(address airlineAddress, address voterAddress) external checkAirlineExists(airlineAddress) requireIsOperational returns (bool){
         require(airlines[airlineAddress].votes.voters[voterAddress] == false, "Airline already voted by this account");
 
         airlines[airlineAddress].votes.votersCount = airlines[airlineAddress].votes.votersCount.add(1);
@@ -160,22 +171,57 @@ contract FlightSuretyData {
      * @dev Buy insurance for a flight
      *
      */
-    function buy() external payable {
-
+    function buy(address passenger, bytes32 flightKey) external requireIsOperational payable {
+        insurances[flightKey] = InsuranceInfo({
+            passenger: passenger,
+            value: msg.value,
+            status: INSURANCE_STATUS_IN_PROGRESS
+        });
     }
 
     /**
      *  @dev Credits payouts to insurees
     */
-    function creditInsurees() external pure {
+    function creditInsurees(bytes32 flightKey) external requireIsOperational {
+        InsuranceInfo insurance = insurances[flightKey];
+        if (insurance.status == INSURANCE_STATUS_IN_PROGRESS) {
+            uint256 insurancePayoutValue = getInsurancePayoutValue(flightKey);
+            uint256 balance = passengerBalances[insurance.passenger];
+            passengerBalances[insurance.passenger] = balance.add(insurancePayoutValue);
+            insurance.status = INSURANCE_STATUS_PAID;
+        }
     }
 
+    /**
+     *  @dev Set insurance closed status
+    */
+    function closeInsurance(bytes32 flightKey) external requireIsOperational{
+        InsuranceInfo insurance = insurances[flightKey];
+        if (insurance.status != INSURANCE_STATUS_UNKNOWN) {
+            insurance.status = INSURANCE_STATUS_CLOSED;
+        }
+    }
+
+
+    function getInsurancePayoutValue(bytes32 flightKey) view public requireIsOperational returns(uint256){
+        InsuranceInfo insurance = insurances[flightKey];
+        uint256 insurancePayoutValue = insurance.value.div(2);
+        return insurancePayoutValue.add(insurance.value);
+    }
+
+    function getPassengerBalance(address passengerAddress) view public requireIsOperational returns(uint256){
+        return passengerBalances[passengerAddress];
+    }
 
     /**
      *  @dev Transfers eligible payout funds to insuree
      *
     */
-    function pay() external pure {
+    function pay(address passengerAddress) external requireIsOperational {
+        uint256 balance = passengerBalances[passengerAddress];
+        require(address(this).balance > balance, 'Not enough contact balance');
+        passengerBalances[passengerAddress] = 0;
+        passengerAddress.transfer(balance);
     }
 
     /**
